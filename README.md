@@ -3,7 +3,7 @@ Django app for running Weebly apps
 
 ## Setup
 
-### Settings
+### Settings:
 
 ```
 INSTALLED_APPS = [
@@ -35,7 +35,7 @@ DEFAULT_WEEBLY_AUTH = ...
 
 `DEFAULT_WEEBLY_AUTH` is the database id for the default `WeeblyAuth` for notifying payments. Sometimes there are payments that need to be reported but the user already uninstalled the app, so their `WeeblyAuth` is no longer valid. This usually happens with refunds.
 
-### Urls
+### Urls:
 
 Add this to handle Weebly's OAuth:
 
