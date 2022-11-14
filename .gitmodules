@@ -1,0 +1,3 @@
+[submodule "deps/marto_python"]
+	path = deps/marto_python
+	url = https://github.com/newearthmartin/marto_python.git
