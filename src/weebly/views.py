@@ -56,60 +56,56 @@ class WeeblyAuthMiddleware(MiddlewareMixin):
         Checks if weebly authentication is needed and
         if so, allows the view only when there is an authenticated user
         """
-        request.weebly_auth = None
-        if not RequiresWeeblyAuth.view_requires(view_func): return None
-        request.weebly_auth = WeeblyAuthMiddleware.get_weebly_auth(request)
-        if request.weebly_auth and request.weebly_auth.auth_token:
-            return None
-        context = {
-            'invalid_jwt': 'jwt' in request.GET
-        }
-        return render(request, 'missing_weebly_auth.html', context=context, status=401)
-
-    @staticmethod
-    def get_weebly_auth(request):
-        """
-        Returns the weebly_auth from different sources or None if can't find one.
-        Stores the found weebly_auth in the session for further use.
-        Looks for it in:
-            -jwt parameter in the URL
-            -the session
-            -or the first weebly_auth if not PRODUCTION (for testing purposes)
-        """
+        jwt_error = None
         if 'jwt' in request.GET:
-            # in case of auth authentication, jwt is there but no weebly_auth in the DB
-            jwt_key = request.GET['jwt']
-            try:
-                decoded = jwt.decode(jwt_key,
-                                     settings.WEEBLY_SECRET,
-                                     algorithms=['HS256'],
-                                     options={'verify_iat': False})
-            except jwt.DecodeError as e:
-                logger.warning(f'Error decoding jwt - {e}')
-                return None
-            user_id = decoded['user_id']
-            site_id = decoded['site_id']
-            weebly_auth = WeeblyAuth.objects.filter(user__user_id=user_id, site__site_id=site_id).first()
+            weebly_auth, jwt_error = WeeblyAuthMiddleware.__process_jwt(request.GET['jwt'])
         elif request.user.is_superuser and 'weebly_auth' in request.GET:
             weebly_auth_id = int(request.GET['weebly_auth'])
             weebly_auth = WeeblyAuth.objects.filter(pk=weebly_auth_id).first()
-        elif 'weebly_auth' in request.session:
-            weebly_auth = WeeblyAuthMiddleware.get_session_auth_info(request)
         else:
-            weebly_auth = None
-        if weebly_auth:
-            WeeblyAuthMiddleware.set_session_auth_info(request, weebly_auth)
-        elif 'weebly_auth' in request.session:
-            del request.session['weebly_auth']
-        return weebly_auth
+            weebly_auth = WeeblyAuthMiddleware.get_session_auth_info(request)
+
+        WeeblyAuthMiddleware.set_session_auth_info(request, weebly_auth)
+
+        if not RequiresWeeblyAuth.view_requires(view_func):
+            return None
+        if request.weebly_auth and request.weebly_auth.auth_token:
+            return None
+
+        return render(request, 'missing_weebly_auth.html', context={'jwt_error': jwt_error}, status=401)
+
+    @staticmethod
+    def __process_jwt(jwt_token):
+        try:
+            decoded = jwt.decode(jwt_token, settings.WEEBLY_SECRET, algorithms=['HS256'], options={'verify_iat': False})
+        except jwt.DecodeError as e:
+            logger.warning(f'Error decoding jwt - {e}')
+            return None, f'Error decoding JWT'
+        except jwt.ExpiredSignatureError as e:
+            logger.warning(f'JWT token expired - {e}')
+            return None, 'Invalid JWT token - Token expired'
+        except jwt.InvalidTokenError as e:
+            logger.warning(f'Invalid JWT token - {e}')
+            return None, f'Invalid JWT token - {e}'
+        user_id = decoded['user_id']
+        site_id = decoded['site_id']
+        return WeeblyAuth.objects.filter(user__user_id=user_id, site__site_id=site_id).first(), None
 
     @staticmethod
     def set_session_auth_info(request, weebly_auth):
+        request.weebly_auth = weebly_auth
+        session_auth_info = request.session.get('weebly_auth', None)
+
+        if not weebly_auth:
+            if session_auth_info:
+                request.session.clear()
+            request.session.pop('weebly_auth', None)
+            return
+
         auth_info = {
             'user_id': weebly_auth.user.user_id,
             'site_id': weebly_auth.site.site_id
         }
-        session_auth_info = request.session.get('weebly_auth', None)
         if auth_info != session_auth_info:
             request.session.clear()
             request.session['weebly_auth'] = auth_info

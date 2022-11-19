@@ -2,6 +2,7 @@ import logging
 import json
 import jwt
 import requests
+from datetime import timedelta
 from collections.abc import Iterable
 from django.conf import settings
 from django.contrib.admin import ModelAdmin
@@ -212,9 +213,12 @@ class WeeblyAuth(Model):
     get_site_id.short_description = 'site'
     get_site_id.admin_order_field = 'site'
 
-    def get_jwt_token(self):
-        user_site = {'user_id': self.user.user_id, 'site_id': self.site.site_id}
-        return jwt.encode(user_site, settings.WEEBLY_SECRET, algorithm='HS256')
+    def get_jwt_token(self, exp_minutes=None):
+        payload = {'user_id': self.user.user_id, 'site_id': self.site.site_id}
+        if exp_minutes is not None:
+            exp = timezone.now() + timedelta(minutes=exp_minutes)
+            payload['exp'] = int(exp.timestamp())
+        return jwt.encode(payload, settings.WEEBLY_SECRET, algorithm='HS256')
 
     class Meta:
         unique_together = [['user', 'site']]
