@@ -533,7 +533,12 @@ class WeeblyPaymentNotification(Model):
         weebly_auth = self.site.get_default_weebly_auth()
         if not weebly_auth.is_valid:
             logger.warning('Invalid weebly auth for notifying payment, using default weebly auth')
-            weebly_auth = WeeblyAuth.objects.get(pk=settings.DEFAULT_WEEBLY_AUTH)
+            weebly_auth_pk = getattr(settings, 'DEFAULT_WEEBLY_AUTH', None)
+            if weebly_auth_pk:
+                weebly_auth = WeeblyAuth.objects.get(pk=weebly_auth_pk)
+            else:
+                logger.error(f'Unable to notify payment {self} - Invalid weebly auth - Missing default weebly auth')
+                return {'error': 'Invalid weebly auth'}
 
         method = 'purchase' if self.purchase_not_refund else 'refund'
         if not settings.PRODUCTION: method = 'test' + method
