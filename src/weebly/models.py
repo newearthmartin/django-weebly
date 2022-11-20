@@ -266,7 +266,7 @@ class WeeblyAuth(Model):
             'User-Agent': settings.WEEBLY_APP_NAME,
             'X-Weebly-Access-Token': self.auth_token,
         }
-        url = settings.WEEBLY_API_ENDPOINT + path
+        url = 'https://api.weebly.com' + path
         logger.info(f'{action_name} - {method.upper()} {url}')
         return requests.request(method, url, headers=headers, params=params, json=data, timeout=60)
 
